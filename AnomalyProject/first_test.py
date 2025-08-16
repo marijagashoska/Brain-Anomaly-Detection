@@ -36,6 +36,8 @@
 # image_path = 'Patient01178_Plane3_4_of_4.png'
 # predicted_class_idx = predict_image(image_path)
 # print("Predicted class:", class_names[predicted_class_idx])
+import os
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 import torch
 from torchvision import transforms
 from PIL import Image

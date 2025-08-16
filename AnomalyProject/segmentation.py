@@ -49,6 +49,8 @@ class UltrasoundSegmentationDataset(Dataset):
         img_path, mask_path = self.image_mask_pairs[idx]
         image = np.array(Image.open(img_path).convert("L"))
         mask = np.array(Image.open(mask_path).convert("L"))
+        print(image)
+        print(mask)
         mask = (mask > 0).astype(np.float32)
 
         if self.transform:
@@ -182,6 +184,7 @@ for epoch in range(10):
 
         if (batch_idx + 1) % 10 == 0 or (batch_idx + 1) == len(train_loader):
             print(f"  Batch {batch_idx + 1}/{len(train_loader)} - Loss: {loss.item():.4f}")
+    avg_train_loss = train_loss / len(train_loader)
 
     # Validation
     model.eval()
@@ -202,7 +205,7 @@ for epoch in range(10):
     print(f"  Avg Val Loss:   {val_loss / len(val_loader):.4f}")
 
 # === 8. Save Model ===
-torch.save(model.state_dict(), 'unet_skull_segmentation.pth')
+torch.save(model.state_dict(), 'segmentation_first.pth')
 
 # === 9. Postprocessing: Fit Ellipse ===
 def fit_ellipse_from_mask(mask_tensor):
