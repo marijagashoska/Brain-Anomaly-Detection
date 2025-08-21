@@ -64,7 +64,7 @@ def sort_images_by_trimester(source_folders, output_root="output"):
 
                 if label:
                     label_clean = label.lower().replace("trim", "").replace(".", "").replace(" ", "")
-                    if label_clean in ["2", "3", "2+3"]:
+                    if label_clean in ["1","2", "3", "2+3"]:
                         dest_folder = os.path.join(output_root, f"{label_clean}_trim")
                         os.makedirs(dest_folder, exist_ok=True)
                         shutil.copy(image_path, os.path.join(dest_folder, filename))

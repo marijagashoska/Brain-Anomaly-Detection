@@ -1,0 +1,14 @@
+=== DEBUG SUMMARY ===
+Input root: C:\Users\Lenovo\Downloads\Brain-Anomaly-Detection\AnomalyProject\sorted
+CSV file:   C:\Users\Lenovo\Downloads\Brain-Anomaly-Detection\AnomalyProject\Trans-Thalamic-Pixel-Size.csv
+Pixel col:  Pixel  in mm
+
+Total masks collected: 1073
+Total rows written: 1073
+
+Status counts:
+  OK: 1073
+  SKIPPED: pixel size missing: 0
+  SKIPPED: ellipse fit failed: 0
+
+Trimester subfolders used: {'2_trim_mask': '2', '1_trim_mask': '1', '3_trim_mask': '3', '2+3_trim_mask': '2+3'}
