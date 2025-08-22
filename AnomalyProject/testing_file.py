@@ -1,10 +1,8 @@
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-# Help CUDA allocator reduce fragmentation
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True,max_split_size_mb:64"
 
-# ===== Storage (Drive or local path) =====
-BASE_DIR = '/final_res'  # change if running local
+BASE_DIR = '/final_res'
 os.makedirs(BASE_DIR, exist_ok=True)
 
 import time, cv2, numpy as np, torch, torch.nn as nn, torchvision
@@ -12,18 +10,15 @@ from torch.utils.data import Dataset, DataLoader
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
-# ---- Device selection: GPU if available ----
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# ---- CPU optimizations (still useful for dataloaders) ----
 torch.set_num_threads(os.cpu_count())
 torch.set_num_interop_threads(os.cpu_count())
 torch.backends.mkldnn.enabled = True
 torch.backends.cudnn.benchmark = True
 
-# ===================== Config =====================
-IMAGE_DIR = 'my_new_folder'      # <-- set
-MASK_DIR  = 'my_photos'          # <-- set
+IMAGE_DIR = 'my_new_folder'
+MASK_DIR  = 'my_photos'
 SAVE_PATH = os.path.join(BASE_DIR, 'segmentation_second.pth')
 LOG_FILE  = os.path.join(BASE_DIR, 'training_log.txt')
 
@@ -41,10 +36,9 @@ LOG_EVERY   = 25
 USE_POSWEIGHT = False
 BCE_WEIGHT    = 0.0
 
-# NEW: process each batch in smaller GPU chunks, but keep effective batch = BATCH
-ACCUM_STEPS = 4  # 16 / 4 = micro-batch of 4; adjust if needed (must divide current batch size)
+ACCUM_STEPS = 4
 
-# ===================== Small utils =====================
+
 def log_to_file(text: str):
     with open(LOG_FILE, "a", encoding="utf-8") as f:
         f.write(text + "\n")
@@ -57,7 +51,6 @@ def crop_to_match(a: torch.Tensor, b: torch.Tensor):
         return t[:, :, top:top+h, left:left+w]
     return center_crop(a), center_crop(b)
 
-# ===================== Pair images & masks =====================
 def build_pairs(image_dir, mask_dir):
     image_files = sorted([f for f in os.listdir(image_dir) if f.lower().endswith('.png')])
     mask_files  = sorted([f for f in os.listdir(mask_dir)  if f.lower().endswith('.png')])
@@ -70,7 +63,6 @@ def build_pairs(image_dir, mask_dir):
     print(f"Found {len(paired)} valid image-mask pairs.")
     return paired
 
-# ===================== Dataset =====================
 class FetalSkullDataset(Dataset):
     def __init__(self, pairs, transform=None):
         self.pairs = pairs; self.transform = transform
@@ -93,7 +85,6 @@ class FetalSkullDataset(Dataset):
         mask = (mask > 0).float().unsqueeze(0)    # (1,H,W)
         return img, mask
 
-# ===================== Transforms =====================
 if NO_RESIZE:
     train_transform = A.Compose([A.Normalize(mean=(0.5,), std=(0.5,)), ToTensorV2()])
     val_transform   = A.Compose([A.Normalize(mean=(0.5,), std=(0.5,)), ToTensorV2()])
@@ -101,7 +92,6 @@ else:
     train_transform = A.Compose([A.Resize(IMG_H, IMG_W), A.Normalize(mean=(0.5,), std=(0.5,)), ToTensorV2()])
     val_transform   = A.Compose([A.Resize(IMG_H, IMG_W), A.Normalize(mean=(0.5,), std=(0.5,)), ToTensorV2()])
 
-# ===================== UNet =====================
 def norm_layer(num_channels):
     return nn.GroupNorm(min(8, num_channels), num_channels) if USE_GROUPNORM else nn.BatchNorm2d(num_channels)
 
@@ -140,7 +130,6 @@ class UNet(nn.Module):
         x = self.up(x);  x = torch.cat([x, self._center_crop_to(c1, x)], 1); x = self.u1(x)
         return self.outc(x)
 
-# ===================== Metrics & Loss =====================
 def soft_dice(y_true, y_prob, smooth=1.0):
     y_prob, y_true = crop_to_match(y_prob, y_true)
     yt = y_true.reshape(y_true.size(0), -1); yp = y_prob.reshape(y_prob.size(0), -1)
@@ -157,7 +146,6 @@ class DiceLoss(nn.Module):
         logits, y_true = crop_to_match(logits, y_true)
         return 1.0 - soft_dice(y_true, torch.sigmoid(logits))
 
-# ===================== Eval (with AMP) =====================
 @torch.no_grad()
 def evaluate(model, loader, device, thr=0.5):
     model.eval()
@@ -176,7 +164,7 @@ def evaluate(model, loader, device, thr=0.5):
             torch.cuda.empty_cache()
     return float(np.mean(softs)), float(np.mean(hards))
 
-# ===================== Train (with AMP + microbatching) =====================
+
 def estimate_pos_weight(loader, max_batches=8, eps=1e-6, device='cpu'):
     fg = bg = 0.0
     for i, (_, m) in enumerate(loader):
@@ -209,7 +197,6 @@ def train(model, train_loader, val_loader, device,
     start_line = f"Device: {device.type.upper()} | Steps/epoch: {steps} | Batch: {train_loader.batch_size}"
     print(start_line, flush=True); log_to_file(start_line)
 
-    # Dry run under autocast, then free batch
     xb, yb = next(iter(train_loader))
     with torch.no_grad(), torch.amp.autocast(device_type=device.type, dtype=torch.float16 if device.type=="cuda" else torch.bfloat16):
         _ = model(xb.to(device))
@@ -226,7 +213,6 @@ def train(model, train_loader, val_loader, device,
             imgs = imgs.to(device); masks = masks.to(device)
 
             opt.zero_grad(set_to_none=True)
-            # Split the big batch into ACCUM_STEPS micro-batches (keeps effective batch size the same)
             mb_imgs = imgs.chunk(ACCUM_STEPS)
             mb_masks = masks.chunk(ACCUM_STEPS)
             for mb_i, (i_mb, m_mb) in enumerate(zip(mb_imgs, mb_masks), 1):
@@ -234,11 +220,10 @@ def train(model, train_loader, val_loader, device,
                     logits = model(i_mb)
                     logits_c, masks_c = crop_to_match(logits, m_mb)
                     loss = dice_loss(logits_c, masks_c) + bce_weight * bce(logits_c, masks_c)
-                    loss = loss / ACCUM_STEPS  # normalize over the accumulated micro-batches
+                    loss = loss / ACCUM_STEPS
 
                 scaler.scale(loss).backward()
 
-                # free per-microbatch temps
                 del logits, logits_c, masks_c, loss
                 if device.type == "cuda":
                     torch.cuda.empty_cache()
@@ -246,17 +231,12 @@ def train(model, train_loader, val_loader, device,
             scaler.step(opt)
             scaler.update()
 
-            # track loss approximately by reusing last microbatch's loss add (already divided),
-            # but better: recompute quickly on CPU-free; here we just increment by 0 for speed
-            # (optional) run_loss += 0.0
-
             if i % log_every == 0 or i == steps:
                 elapsed = time.time() - t0
                 itps = i / max(elapsed, 1e-6)
                 msg = f"[ep {ep}] {i}/{steps} | {itps:.2f} it/s"
                 print(msg, flush=True); log_to_file(msg)
 
-        # (optional) compute avg train loss if you want exact numbers; skipped to save VRAM
         tr_loss = float('nan')
         val_soft, val_hard = evaluate(model, val_loader, device)
         line = f"Epoch {ep:03d} | TrainLoss {tr_loss} | ValSoftDice {val_soft:.4f} | ValHardDice@0.5 {val_hard:.4f}"
@@ -273,12 +253,10 @@ def train(model, train_loader, val_loader, device,
                 print(stop_msg); log_to_file(stop_msg)
                 break
 
-# ===================== Split =====================
 def split_indices(n, train_ratio=0.8, seed=42):
     idx = list(range(n)); rng = np.random.default_rng(seed); rng.shuffle(idx)
     ntr = int(train_ratio * n); return idx[:ntr], idx[ntr:]
 
-# ===================== Main =====================
 def main():
     pairs = build_pairs(IMAGE_DIR, MASK_DIR)
     if not pairs: raise RuntimeError("No valid image-mask pairs found.")

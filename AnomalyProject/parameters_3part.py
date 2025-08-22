@@ -1,32 +1,25 @@
-# -*- coding: utf-8 -*-
 import os, re, math, glob, textwrap
 import cv2
 import numpy as np
 import pandas as pd
 from typing import Dict, List, Optional, Tuple
 
-# =================== CONFIG: adjust these 3 paths if needed ===================
 BASE_DIR    = r"C:\Users\Lenovo\Downloads\Brain-Anomaly-Detection\AnomalyProject"
-INPUT_ROOT  = os.path.join(BASE_DIR, "sorted")   # <-- contains 2_trim_mask and 3_trim_mask
+INPUT_ROOT  = os.path.join(BASE_DIR, "sorted")
 PIXEL_CSV   = os.path.join(BASE_DIR, "Trans-Thalamic-Pixel-Size.csv")
 
-# Which subfolders (under INPUT_ROOT) to scan and what trimester to assign:
 TRIM_FOLDERS = {
     "2_trim_mask": "2",
     "1_trim_mask": "1",
     "3_trim_mask": "3",
     "2+3_trim_mask": "2+3",
-    # If you later add a combined folder, you can uncomment/add:
-    # "2+3_trim_mask": "2+3",
 }
 
-# ======================== OUTPUT (auto-created) ========================
 OUT_DIR   = os.path.join(BASE_DIR, "tt_reports")
 OUT_CSV   = os.path.join(OUT_DIR, "tt_measurements_report.csv")
 OUT_XLSX  = os.path.join(OUT_DIR, "tt_measurements.xlsx")
 DEBUG_TXT = os.path.join(OUT_DIR, "debug_report.txt")
 
-# ======================== MASK DETECTION SETTINGS ======================
 MASK_EXTS = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"}
 MASK_SUFFIXES = [
     "_mask_0", "_mask_1", "_mask",
@@ -34,7 +27,6 @@ MASK_SUFFIXES = [
     "_annotation", "_ann"
 ]
 
-# --------------------------- HELPERS ---------------------------
 def ensure_exists(path: str):
     if not os.path.exists(path):
         raise FileNotFoundError(f"Path not found: {path}")
@@ -55,7 +47,6 @@ def looks_like_mask(p: str) -> bool:
     return "_mask" in stem or "_seg" in stem or "_label" in stem
 
 def list_masks(root: str) -> List[str]:
-    """Prefer files that look like masks; if none, fall back to all images."""
     files = list_all_images(root)
     masks = [p for p in files if looks_like_mask(p)]
     return masks if masks else files
@@ -68,13 +59,6 @@ def strip_mask_suffix(stem: str) -> str:
     return m.group(1) if m else stem
 
 def load_pixel_sizes(csv_path: str) -> Tuple[Dict[str, float], Dict[str, float], List[str], str]:
-    """
-    Returns:
-      - exact_map: image_basename -> mm_per_px
-      - patient_avg_map: PatientNNNNN -> avg(mm_per_px)
-      - sample_labels: first few label basenames for debug print
-      - mm_col: the name of the pixel column chosen
-    """
     df = pd.read_csv(csv_path)
     df.columns = [c.strip() for c in df.columns]
     if "Label" not in df.columns:
@@ -106,13 +90,6 @@ def load_pixel_sizes(csv_path: str) -> Tuple[Dict[str, float], Dict[str, float],
     return exact_map, patient_avg_map, label_basenames[:10], mm_col
 
 def lookup_mm_per_px(mask_stem: str, exact_map: Dict[str, float], patient_avg_map: Dict[str, float]) -> Tuple[Optional[float], str, str]:
-    """
-    Resolve mm/px for a mask stem:
-      1) exact match on '<stem>.png' (or .jpg/.jpeg)
-      2) any CSV key that starts with '<stem>'
-      3) patient prefix average (e.g., 'Patient00216')
-    Returns (mm_per_px, used_label_key, source)
-    """
     image_stem = strip_mask_suffix(mask_stem)
     candidates = [image_stem + ext for ext in (".png", ".jpg", ".jpeg")]
     for c in candidates:
@@ -133,7 +110,6 @@ def lookup_mm_per_px(mask_stem: str, exact_map: Dict[str, float], patient_avg_ma
     return None, image_stem + ".png", "missing"
 
 def try_binarize(mask_gray: np.ndarray) -> np.ndarray:
-    """Robust binarization: OTSU, invert if needed, then morphological close."""
     _t, bw = cv2.threshold(mask_gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     if np.count_nonzero(bw) < 0.05 * bw.size:
         _t, bw = cv2.threshold(mask_gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
@@ -142,7 +118,6 @@ def try_binarize(mask_gray: np.ndarray) -> np.ndarray:
     return bw
 
 def fit_head_ellipse_from_mask(mask_path: str):
-    """Return cv2 ellipse: ((xc,yc),(MA,ma),angle) or None."""
     m = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
     if m is None:
         return None
@@ -191,17 +166,14 @@ def unique_sheetname(existing: set, base: str) -> str:
             existing.add(trimmed); return trimmed
         i += 1
 
-# ------------------------------ MAIN ------------------------------
 def main():
     ensure_exists(INPUT_ROOT)
     ensure_exists(PIXEL_CSV)
     ensure_dir(OUT_DIR)
 
-    # Load pixel sizes
     exact_map, patient_avg_map, sample_labels, mm_col = load_pixel_sizes(PIXEL_CSV)
 
-    # Gather masks per trimester subfolder
-    collected = []  # list of tuples: (mask_path, trimester_label)
+    collected = []
     for sub, tri in TRIM_FOLDERS.items():
         subdir = os.path.join(INPUT_ROOT, sub)
         if not os.path.isdir(subdir):
@@ -229,7 +201,7 @@ def main():
             rows.append({
                 "patient": pat_id,
                 "image": used_label,
-                "trimester": trimester,             # <- from subfolder
+                "trimester": trimester,
                 "pixel_mm": "",
                 "BPD_mm": "", "OFD_mm": "", "HC_mm": "", "CI_pct": "", "SkullArea_mm2": "",
                 "status": "SKIPPED: pixel size missing",
@@ -244,7 +216,7 @@ def main():
             rows.append({
                 "patient": pat_id,
                 "image": used_label,
-                "trimester": trimester,             # <- from subfolder
+                "trimester": trimester,
                 "pixel_mm": round(mm_per_px, 6),
                 "BPD_mm": "", "OFD_mm": "", "HC_mm": "", "CI_pct": "", "SkullArea_mm2": "",
                 "status": "SKIPPED: ellipse fit failed",
@@ -258,7 +230,7 @@ def main():
         rows.append({
             "patient": pat_id,
             "image": used_label,
-            "trimester": trimester,                 # <- from subfolder
+            "trimester": trimester,
             "pixel_mm": round(mm_per_px, 6),
             "BPD_mm": round(bio["BPD_mm"], 1),
             "OFD_mm": round(bio["OFD_mm"], 1),
@@ -271,14 +243,11 @@ def main():
         })
         reasons["ok"] += 1
 
-    # Build DataFrame & save
     cols = ["patient","image","trimester","pixel_mm","BPD_mm","OFD_mm","HC_mm","CI_pct","SkullArea_mm2","status","mm_source","mask_path"]
     df = pd.DataFrame(rows, columns=cols)
     df.to_csv(OUT_CSV, index=False)
     print(f"[INFO] Saved master CSV: {OUT_CSV}")
 
-    # Excel workbook
-    from collections import defaultdict
     patients = sorted(df["patient"].fillna("Unknown").unique().tolist()) if not df.empty else []
     sheetnames_used = set()
     with pd.ExcelWriter(OUT_XLSX, engine="openpyxl") as writer:
@@ -286,7 +255,6 @@ def main():
 
     print(f"[INFO] Saved Excel workbook: {OUT_XLSX}")
 
-    # Debug report
     dbg = textwrap.dedent(f"""
     === DEBUG SUMMARY ===
     Input root: {INPUT_ROOT}

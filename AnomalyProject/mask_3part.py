@@ -1,20 +1,16 @@
-#!/usr/bin/env python3
 import os, shutil
 from pathlib import Path
 
-# ========= HARD-CODE YOUR PATHS HERE =========
 SORTED_DIR = Path(r"C:\Users\Lenovo\Downloads\Brain-Anomaly-Detection\AnomalyProject\sorted")
 MASK_DIR   = Path(r"C:\Users\Lenovo\Downloads\Brain-Anomaly-Detection\AnomalyProject\Masks")
-TRIMS      = ["1_trim","2+3_trim","2_trim", "3_trim"]   # change to ["3_trim"] if you only want third trimester
-DRY_RUN    = False                   # set True to preview actions
-# ============================================
+TRIMS      = ["1_trim","2+3_trim","2_trim", "3_trim"]
+DRY_RUN    = False
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}
 MASK_EXTS  = {".png", ".jpg", ".jpeg", ".tif", ".tiff"}
 
-# If your masks follow a specific suffix, add it here.
 CANDIDATE_SUFFIXES = [
-    "",                # exact stem match
+    "",
     "_mask",
     "_mask_0",
     "_mask_1",
@@ -33,11 +29,6 @@ def list_images(folder: Path):
     return [p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in IMAGE_EXTS]
 
 def find_mask(mask_root: Path, stem: str):
-    """
-    Try common naming variants for masks.
-    Returns the first matching mask path or None.
-    Preference: entries with '_mask' in the name if multiple exist.
-    """
     candidates = []
     for suf in CANDIDATE_SUFFIXES:
         for ext in MASK_EXTS:
@@ -46,14 +37,12 @@ def find_mask(mask_root: Path, stem: str):
                 candidates.append(p)
 
     if not candidates:
-        # fall back: any file in mask_dir starting with <stem> and a mask-y extension
         globbed = list(mask_root.glob(f"{stem}*"))
         candidates = [p for p in globbed if p.is_file() and p.suffix.lower() in MASK_EXTS]
 
     if not candidates:
         return None
 
-    # Prefer names containing "_mask", then shorter name
     candidates.sort(key=lambda x: (0 if "_mask" in x.stem.lower() else 1, len(x.name)))
     return candidates[0]
 

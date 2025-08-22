@@ -13,7 +13,6 @@ from sklearn.model_selection import train_test_split
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
-# === 1. Match image and mask pairs ===
 image_dir = 'sorted/2_trim'
 mask_dir =  'Masks'
 
@@ -36,7 +35,6 @@ for img in image_files:
 
 print(f"Found {len(paired_paths)} valid image-mask pairs.")
 
-# === 2. Dataset ===
 class UltrasoundSegmentationDataset(Dataset):
     def __init__(self, image_mask_pairs, transform=None):
         self.image_mask_pairs = image_mask_pairs
@@ -60,13 +58,11 @@ class UltrasoundSegmentationDataset(Dataset):
 
         return image, mask.unsqueeze(0)
 
-# === 3. Albumentations Transform (no resizing) ===
 transform = A.Compose([
     A.Normalize(mean=(0.5,), std=(0.5,)),
     ToTensorV2()
 ])
 
-# === 4. U-Net Model ===
 class UNet(nn.Module):
     def __init__(self):
         super().__init__()
@@ -109,7 +105,6 @@ class UNet(nn.Module):
 
         return torch.sigmoid(self.final(d1))
 
-# === 5. Dice Loss ===
 def dice_loss(pred, target, smooth=1.):
     if pred.shape != target.shape:
         min_h = min(pred.shape[2], target.shape[2])
@@ -123,44 +118,12 @@ def dice_loss(pred, target, smooth=1.):
     return 1 - ((2. * intersection + smooth) / (pred.sum() + target.sum() + smooth))
 
 
-
-# === 6. Train/Val Split ===
 train_paths, val_paths = train_test_split(paired_paths, test_size=0.2, random_state=42)
 train_ds = UltrasoundSegmentationDataset(train_paths, transform)
 val_ds = UltrasoundSegmentationDataset(val_paths, transform)
 train_loader = DataLoader(train_ds, batch_size=1, shuffle=True)
 val_loader = DataLoader(val_ds, batch_size=1, shuffle=False)
 
-# === 7. Training ===
-# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-# model = UNet().to(device)
-# optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
-#
-# for epoch in range(10):
-#     model.train()
-#     train_loss = 0
-#     for img, mask in train_loader:
-#         img, mask = img.to(device), mask.to(device)
-#         pred = model(img)
-#         loss = dice_loss(pred, mask)
-#
-#         optimizer.zero_grad()
-#         loss.backward()
-#         optimizer.step()
-#         train_loss += loss.item()
-#
-#     model.eval()
-#     val_loss = 0
-#     with torch.no_grad():
-#         for img, mask in val_loader:
-#             img, mask = img.to(device), mask.to(device)
-#             pred = model(img)
-#             loss = dice_loss(pred, mask)
-#             val_loss += loss.item()
-#
-#     print(f"Epoch {epoch+1}, Train Loss: {train_loss/len(train_loader):.4f}, Val Loss: {val_loss/len(val_loader):.4f}")
-#
-# === 7. Training ===
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = UNet().to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
@@ -168,7 +131,6 @@ optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 for epoch in range(10):
     print(f"\n=== Epoch {epoch + 1} ===")
 
-    # Training
     model.train()
     train_loss = 0
     print("Training...")
@@ -186,7 +148,6 @@ for epoch in range(10):
             print(f"  Batch {batch_idx + 1}/{len(train_loader)} - Loss: {loss.item():.4f}")
     avg_train_loss = train_loss / len(train_loader)
 
-    # Validation
     model.eval()
     val_loss = 0
     print("Validating...")
@@ -204,10 +165,8 @@ for epoch in range(10):
     print(f"  Avg Train Loss: {train_loss / len(train_loader):.4f}")
     print(f"  Avg Val Loss:   {val_loss / len(val_loader):.4f}")
 
-# === 8. Save Model ===
 torch.save(model.state_dict(), 'segmentation_first.pth')
 
-# === 9. Postprocessing: Fit Ellipse ===
 def fit_ellipse_from_mask(mask_tensor):
     mask_np = mask_tensor.squeeze().cpu().numpy()
     mask_bin = (mask_np > 0.5).astype(np.uint8) * 255

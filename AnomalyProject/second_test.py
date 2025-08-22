@@ -11,12 +11,10 @@ import matplotlib.pyplot as plt
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
-# === Paths ===
 input_dir = 'Orginal_train_images_to_959_661'
 output_dir = 'segmentation_results'
 os.makedirs(output_dir, exist_ok=True)
 
-# === Load model definition ===
 class UNet(torch.nn.Module):
     def __init__(self):
         super().__init__()
@@ -54,19 +52,16 @@ class UNet(torch.nn.Module):
         d1 = self.dec1(torch.cat([d1, e1_crop], dim=1))
         return torch.sigmoid(self.final(d1))
 
-# === Load trained model ===
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = UNet().to(device)
 model.load_state_dict(torch.load('segmentation_first.pth', map_location=device))
 model.eval()
 
-# === Preprocessing ===
 transform = A.Compose([
     A.Normalize(mean=(0.5,), std=(0.5,)),
     ToTensorV2()
 ])
 
-# === Ellipse fitting ===
 def fit_ellipse_from_mask(mask_tensor):
     mask_np = mask_tensor.squeeze() if isinstance(mask_tensor, np.ndarray) else mask_tensor.squeeze().cpu().numpy()
     mask_bin = (mask_np > 0.5).astype(np.uint8) * 255
@@ -83,7 +78,6 @@ def fit_ellipse_from_mask(mask_tensor):
             return ellipse, hc
     return None, None
 
-# === Process each image ===
 for filename in os.listdir(input_dir):
     if not filename.endswith(".png"):
         continue
@@ -104,9 +98,9 @@ for filename in os.listdir(input_dir):
 
     if ellipse:
         cv2.ellipse(result_img, ellipse, (0, 255, 0), 2)
-        print(f"  ➤ Estimated HC: {hc:.2f} pixels")
+        print(f"Estimated HC: {hc:.2f} pixels")
     else:
-        print("  ➤ No ellipse could be fitted.")
+        print("No ellipse could be fitted.")
 
     overlay_path = os.path.join(output_dir, f"{os.path.splitext(filename)[0]}_overlay.png")
     mask_path = os.path.join(output_dir, f"{os.path.splitext(filename)[0]}_mask.png")
