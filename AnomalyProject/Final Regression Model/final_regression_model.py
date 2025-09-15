@@ -83,7 +83,7 @@ def bucket(p):
     return "RED" if p>=args.risk_red else ("YELLOW" if p>=args.risk_yellow else "GREEN")
 out = df[["patient","GA_weeks","BPD_percentile","HC_percentile","CI_pct","Final_screen"]].copy()
 for c in feature_cols: out[c] = df[c]
-out["risk_probability_unhealthy"] = probs_full
+out["risk_probability_unhealthy"] = [f"{p*100:.2f}%" for p in probs_full]
 out["predicted_label"] = np.where(pred_full==1,"Unhealthy","Healthy")
 out["decision_threshold"] = chosen
 out["risk_bucket"] = [bucket(p) for p in probs_full]
